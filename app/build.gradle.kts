@@ -11,7 +11,7 @@ android {
   compileSdk = 36
   
   defaultConfig {
-    applicationId = "com.example"
+    applicationId = "com.aistudio.jarvis.btrpxm"
     minSdk = 24
     targetSdk = 36
     versionCode = 1
