@@ -166,15 +166,34 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
 
     private fun speakOut(text: String) {
         if (isTtsInitialized && tts != null) {
-            // Clean up text for TTS: 
-            // 1. Remove dots specifically as user requested "don't say dot"
-            // 2. Remove markdown artifacts and other noise
+            // Comprehensive voice filter to eliminate dots, stars, and symbols
             val cleanedText = text
-                .replace(".", " ") // Replace dots with a pause-inducing space
-                .replace("*", "")
-                .replace("#", "")
-                .replace("_", "")
-                .replace(Regex("[^\\p{L}\\p{N}\\s।?!]"), " ")
+                .replace("AI", "এ আই")
+                .replace("ai", "এ আই")
+                .replace("Jarvis", "জারভিস")
+                .replace("JARVIS", "জারভিস")
+                .replace("dot", "")
+                .replace("Dot", "")
+                .replace("ডট", "")
+                .replace("...", " ")
+                .replace("..", " ")
+                .replace(".", " ")
+                .replace("*", " ")
+                .replace("#", " ")
+                .replace("_", " ")
+                .replace("-", " ")
+                .replace(":", " ")
+                .replace(";", " ")
+                .replace("/", " ")
+                .replace("\\", " ")
+                .replace("(", " ")
+                .replace(")", " ")
+                .replace("[", " ")
+                .replace("]", " ")
+                .replace("{", " ")
+                .replace("}", " ")
+                .replace("।", " ")
+                .replace(Regex("[^\\p{L}\\p{N}\\s?!]"), " ")
                 .replace(Regex("\\s+"), " ")
                 .trim()
             

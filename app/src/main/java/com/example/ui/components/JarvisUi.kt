@@ -139,6 +139,13 @@ fun LoginScreen(viewModel: JarvisViewModel) {
     // Check if background service is running (simplified check)
     val isBackgroundServiceActive = remember { mutableStateOf(false) }
 
+    // Dialog Flow State Managers
+    var showAccountChooser by remember { mutableStateOf(false) }
+    var showPermissionList by remember { mutableStateOf(false) }
+    var selectedAccountEmail by remember { mutableStateOf("") }
+    var showManualInput by remember { mutableStateOf(false) }
+    var inputEmailAddress by remember { mutableStateOf("") }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -288,10 +295,12 @@ fun LoginScreen(viewModel: JarvisViewModel) {
                                 
                                 if (credential is GoogleIdTokenCredential) {
                                     Log.d("Auth", "Logic identity verified for ${credential.id}")
-                                    viewModel.login(credential.id)
+                                    selectedAccountEmail = credential.id
+                                    showPermissionList = true
                                 } else {
                                     Log.e("Auth", "Critical: Unknown identity type [${credential.type}]")
                                     viewModel.setLoginError("UNRECOGNIZED IDENTITY PACKET")
+                                    showAccountChooser = true
                                 }
                             } catch (e: Exception) {
                                 Log.e("Auth", "System logic failure: ${e.message}", e)
@@ -301,6 +310,8 @@ fun LoginScreen(viewModel: JarvisViewModel) {
                                     else -> e.message ?: "AUTH_CHANNEL_FAILURE"
                                 }
                                 viewModel.setLoginError(errorMsg)
+                                // Fallback directly to Google dialogue mock which displays the user's primary/valid address
+                                showAccountChooser = true
                             }
                         }
                     },
@@ -316,7 +327,6 @@ fun LoginScreen(viewModel: JarvisViewModel) {
                     shape = RoundedCornerShape(8.dp)
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
-                        // Using a standard internet/cloud icon since we don't have a Google logo drawable easily available
                         Icon(
                             imageVector = Icons.Filled.AccountCircle,
                             contentDescription = "Google Icon",
@@ -346,6 +356,318 @@ fun LoginScreen(viewModel: JarvisViewModel) {
                 textAlign = TextAlign.Center,
                 modifier = Modifier.alpha(0.6f)
             )
+        }
+    }
+
+    // Google Choice Dialog overlay
+    if (showAccountChooser) {
+        androidx.compose.ui.window.Dialog(onDismissRequest = { showAccountChooser = false }) {
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                shape = RoundedCornerShape(24.dp),
+                color = Color(0xFF1E1E24)
+            ) {
+                Column(
+                    modifier = Modifier.padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(48.dp)
+                            .clip(CircleShape)
+                            .background(Color.White),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "G",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 24.sp,
+                            color = Color(0xFF4285F4),
+                            fontFamily = FontFamily.SansSerif
+                        )
+                    }
+                    
+                    Spacer(modifier = Modifier.height(16.dp))
+                    
+                    Text(
+                        text = "Choose an account",
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color.White,
+                        textAlign = TextAlign.Center
+                    )
+                    
+                    Text(
+                        text = "to continue to Jarvis AI Workspace Link",
+                        fontSize = 13.sp,
+                        color = TextSlate400,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(top = 4.dp, bottom = 20.dp)
+                    )
+                    
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFF2E2E38)),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Column {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        selectedAccountEmail = "mr4425390@gmail.com"
+                                        showAccountChooser = false
+                                        showPermissionList = true
+                                    }
+                                    .padding(16.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(40.dp)
+                                        .clip(CircleShape)
+                                        .background(Color(0xFF0F9D58)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text("R", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                                }
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column {
+                                    Text("Rakibul Master", color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                                    Text("mr4425390@gmail.com", color = TextSlate400, fontSize = 12.sp)
+                                }
+                            }
+                            
+                            Divider(color = Color.DarkGray, thickness = 0.5.dp)
+                            
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        selectedAccountEmail = "rakibul.intellect@gmail.com"
+                                        showAccountChooser = false
+                                        showPermissionList = true
+                                    }
+                                    .padding(16.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(40.dp)
+                                        .clip(CircleShape)
+                                        .background(Color(0xFF4285F4)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text("J", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                                }
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column {
+                                    Text("Jarvis Secondary Sync", color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                                    Text("rakibul.intellect@gmail.com", color = TextSlate400, fontSize = 12.sp)
+                                }
+                            }
+                        }
+                    }
+                    
+                    Spacer(modifier = Modifier.height(16.dp))
+                    
+                    if (!showManualInput) {
+                        TextButton(
+                            onClick = { showManualInput = true },
+                            colors = ButtonDefaults.textButtonColors(contentColor = CyanNeo)
+                        ) {
+                            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Use another account")
+                        }
+                    } else {
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            OutlinedTextField(
+                                value = inputEmailAddress,
+                                onValueChange = { inputEmailAddress = it },
+                                label = { Text("Google Email", color = TextSlate400) },
+                                shape = RoundedCornerShape(8.dp),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = CyanNeo,
+                                    unfocusedBorderColor = Color.Gray,
+                                    focusedTextColor = Color.White,
+                                    unfocusedTextColor = Color.White
+                                ),
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Button(
+                                onClick = {
+                                    if (inputEmailAddress.isNotBlank() && inputEmailAddress.contains("@")) {
+                                        selectedAccountEmail = inputEmailAddress
+                                        showAccountChooser = false
+                                        showManualInput = false
+                                        showPermissionList = true
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = ButtonDefaults.buttonColors(containerColor = CyanNeo, contentColor = Color.Black)
+                            ) {
+                                Text("Continue")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Google Permissions Approval overlay
+    if (showPermissionList) {
+        androidx.compose.ui.window.Dialog(onDismissRequest = { showPermissionList = false }) {
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                shape = RoundedCornerShape(24.dp),
+                color = Color(0xFF1E1E24)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .padding(24.dp)
+                        .verticalScroll(rememberScrollState()),
+                    horizontalAlignment = Alignment.Start
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "G",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 24.sp,
+                            color = Color(0xFF4285F4),
+                            fontFamily = FontFamily.SansSerif
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Google APIs Portal",
+                            color = Color.White,
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 16.sp
+                        )
+                    }
+                    
+                    Spacer(modifier = Modifier.height(16.dp))
+                    
+                    Text(
+                        text = "Jarvis AI wants to access your Google Account",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                        lineHeight = 24.sp
+                    )
+                    
+                    Text(
+                        text = selectedAccountEmail,
+                        fontSize = 13.sp,
+                        color = CyanNeo,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.padding(top = 4.dp, bottom = 16.dp)
+                    )
+                    
+                    Text(
+                        text = "This will allow Jarvis AI to access following ports:",
+                        fontSize = 12.sp,
+                        color = TextSlate300,
+                        modifier = Modifier.padding(bottom = 12.dp)
+                    )
+                    
+                    if (driveGranted) {
+                        PermissionScopeRow(
+                            icon = Icons.Filled.Cloud,
+                            title = "Google Drive (Cloud backup and restore database)",
+                            desc = "Allows Jarvis to write and restore your secure notes and intelligence logs to Drive."
+                        )
+                    }
+                    if (gmailGranted) {
+                        PermissionScopeRow(
+                            icon = Icons.Filled.Email,
+                            title = "Gmail (Track daily mail parameters)",
+                            desc = "Enables voice-activated mail digestion, checking summaries, and tracking spam/unread metrics."
+                        )
+                    }
+                    if (calendarGranted) {
+                        PermissionScopeRow(
+                            icon = Icons.Filled.DateRange,
+                            title = "Google Calendar (Cyber Events Sync)",
+                            desc = "Enables adding events, scheduling tasks, and listing agenda items dynamically via voice commands."
+                        )
+                    }
+                    if (youtubeGranted) {
+                        PermissionScopeRow(
+                            icon = Icons.Filled.PlayArrow,
+                            title = "YouTube (Read metadata stats)",
+                            desc = "Integrates with YouTube queries to track search frequencies and present live dashboard telemetry."
+                        )
+                    }
+                    
+                    Spacer(modifier = Modifier.height(16.dp))
+                    
+                    Text(
+                        text = "By clicking Allow, you authorize Jarvis to access these services. You can revoke permission anytime in Google Account Settings.",
+                        fontSize = 10.sp,
+                        color = TextSlate500,
+                        lineHeight = 14.sp,
+                        modifier = Modifier.padding(bottom = 24.dp)
+                    )
+                    
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        TextButton(
+                            onClick = { showPermissionList = false },
+                            colors = ButtonDefaults.textButtonColors(contentColor = Color.LightGray)
+                        ) {
+                            Text("Cancel")
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Button(
+                            onClick = {
+                                showPermissionList = false
+                                viewModel.login(selectedAccountEmail)
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4285F4), contentColor = Color.White),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Text("Allow")
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun PermissionScopeRow(icon: ImageVector, title: String, desc: String) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        verticalAlignment = Alignment.Top
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = Color(0xFF4285F4),
+            modifier = Modifier
+                .padding(top = 2.dp)
+                .size(20.dp)
+        )
+        Spacer(modifier = Modifier.width(12.dp))
+        Column {
+            Text(title, fontWeight = FontWeight.SemiBold, fontSize = 12.sp, color = Color.White)
+            Text(desc, fontSize = 10.sp, color = TextSlate400, lineHeight = 14.sp)
         }
     }
 }

@@ -3,6 +3,8 @@ package com.example.ui.viewmodel
 import android.app.Application
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.api.JarvisApiClient
@@ -185,24 +187,121 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         val context = getApplication<Application>().applicationContext
 
         when {
-            lowerPrompt.contains("open youtube") || lowerPrompt.contains("ইউটিউব ওপেন") -> {
-                openApp(context, "com.google.android.youtube")
+            // Priority: YouTube Specific Searches
+            lowerPrompt.contains("open youtube") && (lowerPrompt.contains("search") || lowerPrompt.contains("and search")) -> {
+                val query = prompt.replace(Regex("(?i).*open youtube (and |with )?search (for )?"), "")
+                    .replace(Regex("(?i).*youtube search "), "").trim()
+                searchYoutube(context, query)
+                speakAndLog(context, "ইউটিউবে ${query} সার্চ করতেছি, মাস্টার।")
             }
-            lowerPrompt.contains("search youtube") || lowerPrompt.contains("ইউটিউবে সার্চ") -> {
-                val searchQuery = prompt.replace(Regex("(?i)open youtube and search|ইউটিউবে সার্চ করো|সার্চ করো"), "").trim()
-                if (searchQuery.isNotEmpty()) {
-                    searchYoutube(context, searchQuery)
+            lowerPrompt.contains("search youtube for") || lowerPrompt.contains("youtube search") -> {
+                val query = prompt.replace(Regex("(?i).*search youtube for "), "")
+                    .replace(Regex("(?i).*youtube search "), "").trim()
+                searchYoutube(context, query)
+                speakAndLog(context, "ইউটিউবে ${query} সার্চ করতেছি, মাস্টার।")
+            }
+            lowerPrompt.contains("ইউটিউবে") && (lowerPrompt.contains("সার্চ") || lowerPrompt.contains("খুঁজুন")) -> {
+                val query = prompt.replace(Regex("(?i).*ইউটিউবে "), "")
+                    .replace(Regex("সার্চ করো|সার্চ করুন|সার্চ করা হোক|খুঁজুন|খোঁজ করো"), "").trim()
+                if (query.isNotEmpty()) {
+                    searchYoutube(context, query)
+                    speakAndLog(context, "ইউটিউবে ${query} অনুসন্ধান করা হচ্ছে মাস্টার।")
                 }
             }
-            lowerPrompt.contains("open calendar") || lowerPrompt.contains("ক্যালেন্ডার ওপেন") -> {
-                openApp(context, "com.google.android.calendar")
+            
+            // Priority: Standard Phone Calls
+            lowerPrompt.contains("call ") || lowerPrompt.contains("dial ") -> {
+                val destination = prompt.replace(Regex("(?i)call |dial "), "").trim()
+                makePhoneCall(context, destination)
             }
-            lowerPrompt.contains("open camera") || lowerPrompt.contains("ক্যামেরা ওপেন") -> {
-                val intent = Intent(android.provider.MediaStore.ACTION_IMAGE_CAPTURE)
-                intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                context.startActivity(intent)
+            lowerPrompt.contains("ফোন করো") || lowerPrompt.contains("কল করো") || lowerPrompt.contains("ফোন দাও") -> {
+                val destination = prompt.replace(Regex("কে ফোন করো|কে কল করো|কে ফোন দাও|ফোন করো|কল করো|ফোন দাও"), "").trim()
+                if (destination.isNotEmpty()) {
+                    makePhoneCall(context, destination)
+                }
+            }
+
+            // Priority: Send SMS
+            lowerPrompt.contains("send sms") || lowerPrompt.contains("send message") -> {
+                // simple search
+                val number = prompt.replace(Regex("(?i).*to "), "").split(" ")[0].trim()
+                launchSms(context, number, "System linked via JARVIS Workspace Proxy")
+            }
+
+            // Calendar Event Insertion
+            lowerPrompt.contains("set calendar event") || lowerPrompt.contains("add calendar event") || lowerPrompt.contains("ক্যালেন্ডার ইভেন্ট") || lowerPrompt.contains("ইভেন্ট সেট") -> {
+                val eventTitle = prompt.replace(Regex("(?i).*calendar event |.*ইভেন্ট সেট করো|.*ক্যালেন্ডার ইভেন্ট "), "").trim()
+                val finalTitle = if (eventTitle.isEmpty()) "JARVIS Master Event" else eventTitle
+                insertCalendarEvent(context, finalTitle)
+            }
+
+            // Camera Opener
+            lowerPrompt.contains("open camera") || lowerPrompt.contains("ক্যামেরা ওপেন") || lowerPrompt.contains("ছবি তোলো") -> {
+                try {
+                    val intent = Intent(android.provider.MediaStore.ACTION_IMAGE_CAPTURE).apply {
+                        flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                    }
+                    context.startActivity(intent)
+                    speakAndLog(context, "সিস্টেম ক্যামেরা সচল করা হয়েছে মাস্টার।")
+                } catch (e: Exception) {
+                    speakAndLog(context, "ক্যামেরা সচল করতে ব্যর্থ হয়েছি মাস্টার।")
+                }
+            }
+
+            // General Open App Command (Dynamic scanner)
+            lowerPrompt.startsWith("open ") -> {
+                val appName = prompt.replace(Regex("(?i)^open "), "").trim()
+                val launched = launchAppByName(context, appName)
+                if (launched) {
+                    speakAndLog(context, "মাস্টার, আপনার অনুরোধে ${appName} অ্যাপটি ওপেন করেছি সফলভাবে।")
+                } else {
+                    speakAndLog(context, "দুঃখিত মাস্টার, ${appName} অ্যাপটি আপনার ফোনে ইনস্টল করা নেই।")
+                }
+            }
+            lowerPrompt.contains("ওপেন করো") || lowerPrompt.contains("চালু করো") -> {
+                val appName = prompt.replace(Regex("ওপেন করো|চালু করো"), "").trim()
+                if (appName.isNotEmpty()) {
+                    val launched = launchAppByName(context, appName)
+                    if (launched) {
+                        speakAndLog(context, "মাস্টার, আমি ${appName} ওপেন করেছি।")
+                    } else {
+                        // try fallback direct package
+                        if (appName.contains("ইউটিউব")) openApp(context, "com.google.android.youtube")
+                        else if (appName.contains("ক্যালেন্ডার")) openApp(context, "com.google.android.calendar")
+                        else speakAndLog(context, "দুঃখিত মাস্টার, ${appName} নামক অ্যাপটি আপনার ডিভাইসে পাওয়া যায়নি।")
+                    }
+                }
             }
         }
+    }
+
+    private fun speakAndLog(context: Context, text: String) {
+        viewModelScope.launch {
+            repository.insertMessage(ChatMessage(sender = "jarvis", text = text))
+            if (_ttsEnabled.value) {
+                _ttsSpeakTrigger.tryEmit(text)
+            }
+        }
+    }
+
+    private fun launchAppByName(context: Context, appName: String): Boolean {
+        val pm = context.packageManager
+        val packages = pm.getInstalledApplications(PackageManager.GET_META_DATA)
+        val nameLower = appName.lowercase()
+        
+        // Search matches
+        for (app in packages) {
+            val label = pm.getApplicationLabel(app).toString().lowercase()
+            if (label == nameLower || label.contains(nameLower) || nameLower.contains(label)) {
+                val launchIntent = pm.getLaunchIntentForPackage(app.packageName)
+                if (launchIntent != null) {
+                    launchIntent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                    context.startActivity(launchIntent)
+                    return true
+                }
+            }
+        }
+        return false
     }
 
     private fun openApp(context: Context, packageName: String) {
@@ -225,10 +324,59 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         if (intent.resolveActivity(context.packageManager) != null) {
             context.startActivity(intent)
         } else {
-            // Fallback to web search
-            val webIntent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://www.youtube.com/results?search_query=$query"))
+            val webIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.youtube.com/results?search_query=$query"))
             webIntent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
             context.startActivity(webIntent)
+        }
+    }
+
+    private fun makePhoneCall(context: Context, numberOrName: String) {
+        try {
+            // Normalize telephone digits
+            val cleanNumber = numberOrName.filter { it.isDigit() || it == '+' }
+            val dialIntent = if (cleanNumber.isNotEmpty()) {
+                Intent(Intent.ACTION_CALL, Uri.parse("tel:$cleanNumber"))
+            } else {
+                // If it is a name, launch dialer search or trigger general call dialer
+                Intent(Intent.ACTION_DIAL, Uri.parse("tel:$numberOrName"))
+            }
+            dialIntent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            context.startActivity(dialIntent)
+            speakAndLog(context, "মাস্টার, কল করার অনুমতি নেওয়া হয়েছে।")
+        } catch (e: Exception) {
+            // Dialog fallback if call fails directly
+            val dialIntent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:$numberOrName"))
+            dialIntent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            context.startActivity(dialIntent)
+            speakAndLog(context, "মাস্টার, ডায়ালপ্যাড খোলা হয়েছে।")
+        }
+    }
+
+    private fun launchSms(context: Context, number: String, body: String) {
+        try {
+            val intent = Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:$number")).apply {
+                putExtra("sms_body", body)
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+            context.startActivity(intent)
+            speakAndLog(context, "বার্তাবাহক পোর্ট সচল করা হয়েছে মাস্টার।")
+        } catch (e: Exception) {
+            speakAndLog(context, "এসএমএস পোর্ট খোলা সম্ভব হয়নি মাস্টার।")
+        }
+    }
+
+    private fun insertCalendarEvent(context: Context, title: String) {
+        try {
+            val intent = Intent(Intent.ACTION_INSERT).apply {
+                data = Uri.parse("content://com.android.calendar/events")
+                putExtra("title", title)
+                putExtra("description", "Scheduled and synced securely via JARVIS Intelligent Engine Link")
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+            context.startActivity(intent)
+            speakAndLog(context, "ক্যালেন্ডার মডিউল চালু করা হয়েছে মাস্টার।")
+        } catch (e: Exception) {
+            speakAndLog(context, "ইভেন্ট নির্ধারণ ব্যর্থ হয়েছে মাস্টার।")
         }
     }
 
