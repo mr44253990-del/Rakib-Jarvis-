@@ -2,6 +2,7 @@ package com.example.ui.viewmodel
 
 import android.app.Application
 import android.content.Context
+import android.content.Intent
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.api.JarvisApiClient
@@ -165,6 +166,9 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                 memories = currentMemories
             )
 
+            // 6. Check for intent commands within the response or prompt
+            handleSystemCommands(userPrompt, finalResponse)
+
             // 4. Insert Assistant response
             repository.insertMessage(ChatMessage(sender = "jarvis", text = finalResponse))
             _isGenerating.value = false
@@ -173,6 +177,58 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
             if (_ttsEnabled.value) {
                 _ttsSpeakTrigger.tryEmit(finalResponse)
             }
+        }
+    }
+
+    private fun handleSystemCommands(prompt: String, response: String) {
+        val lowerPrompt = prompt.lowercase()
+        val context = getApplication<Application>().applicationContext
+
+        when {
+            lowerPrompt.contains("open youtube") || lowerPrompt.contains("ইউটিউব ওপেন") -> {
+                openApp(context, "com.google.android.youtube")
+            }
+            lowerPrompt.contains("search youtube") || lowerPrompt.contains("ইউটিউবে সার্চ") -> {
+                val searchQuery = prompt.replace(Regex("(?i)open youtube and search|ইউটিউবে সার্চ করো|সার্চ করো"), "").trim()
+                if (searchQuery.isNotEmpty()) {
+                    searchYoutube(context, searchQuery)
+                }
+            }
+            lowerPrompt.contains("open calendar") || lowerPrompt.contains("ক্যালেন্ডার ওপেন") -> {
+                openApp(context, "com.google.android.calendar")
+            }
+            lowerPrompt.contains("open camera") || lowerPrompt.contains("ক্যামেরা ওপেন") -> {
+                val intent = Intent(android.provider.MediaStore.ACTION_IMAGE_CAPTURE)
+                intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                context.startActivity(intent)
+            }
+        }
+    }
+
+    private fun openApp(context: Context, packageName: String) {
+        val launchIntent = context.packageManager.getLaunchIntentForPackage(packageName)
+        if (launchIntent != null) {
+            launchIntent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            context.startActivity(launchIntent)
+        } else {
+            viewModelScope.launch {
+                repository.insertMessage(ChatMessage(sender = "jarvis", text = "দুঃখিত মাস্টার, এই অ্যাপটি আপনার ফোনে পাওয়া যায়নি।"))
+            }
+        }
+    }
+
+    private fun searchYoutube(context: Context, query: String) {
+        val intent = Intent(Intent.ACTION_SEARCH)
+        intent.setPackage("com.google.android.youtube")
+        intent.putExtra("query", query)
+        intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
+        if (intent.resolveActivity(context.packageManager) != null) {
+            context.startActivity(intent)
+        } else {
+            // Fallback to web search
+            val webIntent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://www.youtube.com/results?search_query=$query"))
+            webIntent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            context.startActivity(webIntent)
         }
     }
 

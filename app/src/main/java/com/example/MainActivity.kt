@@ -14,22 +14,51 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.runtime.LaunchedEffect
+import androidx.core.content.ContextCompat
+import android.Manifest
+import android.content.pm.PackageManager
 import com.example.ui.components.JarvisAppContent
 import com.example.ui.theme.MyApplicationTheme
 import com.example.ui.viewmodel.JarvisViewModel
 import java.util.Locale
+
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.IntentFilter
+import android.os.Build
 
 class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
 
     private val viewModel: JarvisViewModel by viewModels()
     private var tts: TextToSpeech? = null
     private var isTtsInitialized = false
+    
+    private val voiceCommandReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            val command = intent?.getStringExtra("command") ?: ""
+            if (command.isNotBlank()) {
+                viewModel.updatePrompt(command)
+                viewModel.sendMessage()
+            }
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
+        // Register receiver for background voice commands
+        val filter = IntentFilter("com.example.JARVIS_VOICE_COMMAND")
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            registerReceiver(voiceCommandReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            registerReceiver(voiceCommandReceiver, filter)
+        }
+        
         // Supported edge-to-edge full screen overlays
         enableEdgeToEdge()
+
+        // Request broad permissions for assistant functionality
+        requestPermissions()
 
         // Initialize Native Text-To-Speech (TTS)
         try {
@@ -84,6 +113,24 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         }
     }
 
+    private fun requestPermissions() {
+        val permissions = arrayOf(
+            Manifest.permission.RECORD_AUDIO,
+            Manifest.permission.CALL_PHONE,
+            Manifest.permission.SEND_SMS,
+            Manifest.permission.READ_CONTACTS,
+            Manifest.permission.READ_CALENDAR,
+            Manifest.permission.WRITE_CALENDAR,
+            Manifest.permission.GET_ACCOUNTS
+        )
+        val missingPermissions = permissions.filter {
+            ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
+        }
+        if (missingPermissions.isNotEmpty()) {
+            requestPermissions(missingPermissions.toTypedArray(), 1001)
+        }
+    }
+
     // TextToSpeech Interface Initializations
     override fun onInit(status: Int) {
         if (status == TextToSpeech.SUCCESS) {
@@ -95,8 +142,21 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
                 tts?.setLanguage(Locale.US)
                 isTtsInitialized = true
             } else {
+                // Try to find a female voice
+                val voices = tts?.voices
+                val femaleVoice = voices?.find { 
+                    it.locale.language == "bn" && it.name.lowercase().contains("female") 
+                } ?: voices?.find { 
+                    it.locale.language == "bn" && it.name.lowercase().contains("network") // Network voices are often better
+                }
+                
+                if (femaleVoice != null) {
+                    tts?.voice = femaleVoice
+                    Log.d("MainActivity", "Selected female/premium Bengali voice: ${femaleVoice.name}")
+                }
+
                 isTtsInitialized = true
-                tts?.setPitch(1.0f)   // Natural pitch for Bengali
+                tts?.setPitch(1.1f)   // Slightly higher pitch for female-like tone
                 tts?.setSpeechRate(1.0f) // Normal rate for Bengali
             }
         } else {
@@ -106,12 +166,17 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
 
     private fun speakOut(text: String) {
         if (isTtsInitialized && tts != null) {
-            // Clean up text for TTS (remove markdown asterisks, hashes, dots, brackets, underscores, etc.)
-            // We use a regex that preserves letters, numbers, spaces, and basic sentence markers in Bengali (।?!)
-            // [^\p{L}\p{N}\s।?!] matches any character that is NOT a letter, number, whitespace, or Bengali sentence marker.
-            val cleanedText = text.replace(Regex("[^\\p{L}\\p{N}\\s।?!]"), " ")
-                                  .replace(Regex("\\s+"), " ") // Normalize multiple spaces
-                                  .trim()
+            // Clean up text for TTS: 
+            // 1. Remove dots specifically as user requested "don't say dot"
+            // 2. Remove markdown artifacts and other noise
+            val cleanedText = text
+                .replace(".", " ") // Replace dots with a pause-inducing space
+                .replace("*", "")
+                .replace("#", "")
+                .replace("_", "")
+                .replace(Regex("[^\\p{L}\\p{N}\\s।?!]"), " ")
+                .replace(Regex("\\s+"), " ")
+                .trim()
             
             if (cleanedText.isEmpty()) return
 
@@ -126,6 +191,11 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         // Shutdown text to speech gracefully to release resources
         tts?.stop()
         tts?.shutdown()
+        try {
+            unregisterReceiver(voiceCommandReceiver)
+        } catch (e: Exception) {
+            // Log if already unregistered
+        }
         super.onDestroy()
     }
 }

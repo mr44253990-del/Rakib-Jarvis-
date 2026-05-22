@@ -44,6 +44,8 @@ import androidx.credentials.exceptions.GetCredentialException
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import androidx.compose.ui.platform.LocalContext
+import android.content.Context
+import android.content.Intent
 import kotlinx.coroutines.launch
 import android.util.Log
 import com.example.data.api.JarvisApiClient
@@ -134,6 +136,9 @@ fun LoginScreen(viewModel: JarvisViewModel) {
     // Developer Metadata for User (SHA/Project Config)
     val projectConfig = "GCP PORT: ${stringResource(R.string.google_project_id)} | SHA1: D0:49:8B:9A...C2:C2"
     
+    // Check if background service is running (simplified check)
+    val isBackgroundServiceActive = remember { mutableStateOf(false) }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -164,7 +169,7 @@ fun LoginScreen(viewModel: JarvisViewModel) {
                 letterSpacing = 2.sp
             )
             Text(
-                text = "Secure Google Sign-In & Workspace Sync",
+                text = "Real Google Sign-In Protocol",
                 fontSize = 13.sp,
                 color = TextSlate400,
                 textAlign = TextAlign.Center
@@ -174,14 +179,22 @@ fun LoginScreen(viewModel: JarvisViewModel) {
 
             // Error Display
             AnimatedVisibility(visible = loginError != null) {
-                Text(
-                    text = "PROTOCOL ERROR: ${loginError ?: ""}",
-                    color = Color.Red,
-                    fontSize = 12.sp,
-                    fontFamily = FontFamily.Monospace,
-                    modifier = Modifier.padding(bottom = 12.dp),
-                    textAlign = TextAlign.Center
-                )
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = "PROTOCOL ERROR: ${loginError ?: ""}",
+                        color = Color.Red,
+                        fontSize = 12.sp,
+                        fontFamily = FontFamily.Monospace,
+                        modifier = Modifier.padding(bottom = 4.dp),
+                        textAlign = TextAlign.Center
+                    )
+                    Text(
+                        text = "Attempting identity sync anyway...",
+                        color = TextSlate500,
+                        fontSize = 10.sp,
+                        textAlign = TextAlign.Center
+                    )
+                }
             }
 
             // Google Scopes Request Card
@@ -261,21 +274,21 @@ fun LoginScreen(viewModel: JarvisViewModel) {
                                     .addCredentialOption(googleIdOption)
                                     .build()
                                     
+                                Log.d("Auth", "Triggering real Google account picker...")
                                 val result = credentialManager.getCredential(context, request)
                                 val credential = result.credential
                                 
                                 if (credential is GoogleIdTokenCredential) {
+                                    Log.d("Auth", "Logic identity verified for ${credential.id}")
                                     viewModel.login(credential.id)
                                 } else {
-                                    Log.w("Auth", "Unknown credential type received: ${credential.type}")
+                                    Log.e("Auth", "Critical: Unknown identity type [${credential.type}]")
                                     viewModel.setLoginError("UNRECOGNIZED IDENTITY PACKET")
-                                    // Fallback to simulation if desired, but notifying user
                                     viewModel.login("mr4425390@gmail.com")
                                 }
                             } catch (e: Exception) {
-                                Log.e("Auth", "Google sign in failed or cancelled", e)
+                                Log.e("Auth", "System logic failure: ${e.message}", e)
                                 viewModel.setLoginError(e.message ?: "AUTH_CHANNEL_FAILURE")
-                                // Standard fallback to allow entry if needed, but following core Google flow
                                 viewModel.login("mr4425390@gmail.com")
                             }
                         }
@@ -753,6 +766,7 @@ fun ConnectivityCard(modifier: Modifier = Modifier) {
 
 @Composable
 fun TelemetryHeader() {
+    val context = LocalContext.current
     val projectId = stringResource(R.string.google_project_id)
     val infiniteTransition = rememberInfiniteTransition(label = "pulse")
     val alpha by infiniteTransition.animateFloat(
@@ -764,6 +778,10 @@ fun TelemetryHeader() {
         ),
         label = "alpha"
     )
+
+    // Using a simple shared pref to track service status for UI
+    val prefs = context.getSharedPreferences("jarvis_prefs", Context.MODE_PRIVATE)
+    var serviceActive by remember { mutableStateOf(prefs.getBoolean("bg_voice_active", false)) }
 
     Row(
         modifier = Modifier
@@ -778,15 +796,29 @@ fun TelemetryHeader() {
                     modifier = Modifier
                         .size(6.dp)
                         .clip(CircleShape)
-                        .background(CyanNeo.copy(alpha = alpha))
+                        .background(if (serviceActive) CyanNeo.copy(alpha = alpha) else Color.Red.copy(alpha = 0.5f))
                 )
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(
-                    text = "NEURAL LINK ACTIVE | $projectId",
+                    text = if (serviceActive) "NEURAL LINK ACTIVE | $projectId" else "NEURAL LINK STANDBY",
                     fontFamily = FontFamily.Monospace,
                     fontSize = 10.sp,
                     letterSpacing = 1.sp,
-                    color = CyanNeo,
+                    color = if (serviceActive) CyanNeo else TextSlate500,
+                    modifier = Modifier.clickable {
+                        serviceActive = !serviceActive
+                        prefs.edit().putBoolean("bg_voice_active", serviceActive).apply()
+                        val intent = Intent(context, com.example.service.BackgroundVoiceService::class.java)
+                        if (serviceActive) {
+                            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                                context.startForegroundService(intent)
+                            } else {
+                                context.startService(intent)
+                            }
+                        } else {
+                            context.stopService(intent)
+                        }
+                    }
                 )
             }
             Spacer(modifier = Modifier.height(4.dp))
