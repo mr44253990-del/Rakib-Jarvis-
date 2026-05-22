@@ -134,7 +134,7 @@ fun LoginScreen(viewModel: JarvisViewModel) {
     val loginError by viewModel.loginError.collectAsState()
     
     // Developer Metadata for User (SHA/Project Config)
-    val projectConfig = "GCP PORT: ${stringResource(R.string.google_project_id)} | SHA1: D0:49:8B:9A...C2:C2"
+    val projectConfig = "GCP: ${stringResource(R.string.google_project_id)}\nSHA1: D0:49:8B:9A:81:C7:7F:1F:A2:EA:B0:99:04:5A:DA:CD:C1:E4:C2:C2"
     
     // Check if background service is running (simplified check)
     val isBackgroundServiceActive = remember { mutableStateOf(false) }
@@ -265,17 +265,25 @@ fun LoginScreen(viewModel: JarvisViewModel) {
                             try {
                                 val credentialManager = CredentialManager.create(context)
                                 val googleIdOption = GetGoogleIdOption.Builder()
-                                    .setFilterByAuthorizedAccounts(false)
+                                    .setFilterByAuthorizedAccounts(false) // Show all accounts
                                     .setServerClientId(webClientId)
                                     .setAutoSelectEnabled(false)
+                                    .setNonce("JARVIS_" + System.currentTimeMillis())
                                     .build()
                                     
                                 val request = GetCredentialRequest.Builder()
                                     .addCredentialOption(googleIdOption)
                                     .build()
                                     
-                                Log.d("Auth", "Triggering real Google account picker...")
-                                val result = credentialManager.getCredential(context, request)
+                                Log.d("Auth", "Triggering real Google account picker with Context: $context")
+                                
+                                val activity = (context as? android.app.Activity)
+                                val result = if (activity != null) {
+                                    credentialManager.getCredential(activity, request)
+                                } else {
+                                    credentialManager.getCredential(context, request)
+                                }
+                                
                                 val credential = result.credential
                                 
                                 if (credential is GoogleIdTokenCredential) {
@@ -284,12 +292,15 @@ fun LoginScreen(viewModel: JarvisViewModel) {
                                 } else {
                                     Log.e("Auth", "Critical: Unknown identity type [${credential.type}]")
                                     viewModel.setLoginError("UNRECOGNIZED IDENTITY PACKET")
-                                    viewModel.login("mr4425390@gmail.com")
                                 }
                             } catch (e: Exception) {
                                 Log.e("Auth", "System logic failure: ${e.message}", e)
-                                viewModel.setLoginError(e.message ?: "AUTH_CHANNEL_FAILURE")
-                                viewModel.login("mr4425390@gmail.com")
+                                val errorMsg = when (e) {
+                                    is androidx.credentials.exceptions.GetCredentialCancellationException -> "SIGN-IN CANCELLED BY USER"
+                                    is androidx.credentials.exceptions.NoCredentialException -> "NO GOOGLE ACCOUNTS DETECTED ON DEVICE"
+                                    else -> e.message ?: "AUTH_CHANNEL_FAILURE"
+                                }
+                                viewModel.setLoginError(errorMsg)
                             }
                         }
                     },
