@@ -1,4 +1,5 @@
 <resources>
     <string name="app_name">Jarvis AI</string>
     <string name="default_web_client_id">600378836625-c5mggtqpf2rg81vrklhmi2jkmmvmvnmc.apps.googleusercontent.com</string>
+    <string name="google_project_id">ornate-destiny-459616-h4</string>
 </resources>

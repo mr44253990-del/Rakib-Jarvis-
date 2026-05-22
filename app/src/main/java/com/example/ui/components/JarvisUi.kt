@@ -129,6 +129,10 @@ fun LoginScreen(viewModel: JarvisViewModel) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     val webClientId = stringResource(id = R.string.default_web_client_id)
+    val loginError by viewModel.loginError.collectAsState()
+    
+    // Developer Metadata for User (SHA/Project Config)
+    val projectConfig = "GCP PORT: ${stringResource(R.string.google_project_id)} | SHA1: D0:49:8B:9A...C2:C2"
     
     Box(
         modifier = Modifier
@@ -167,6 +171,18 @@ fun LoginScreen(viewModel: JarvisViewModel) {
             )
 
             Spacer(modifier = Modifier.height(28.dp))
+
+            // Error Display
+            AnimatedVisibility(visible = loginError != null) {
+                Text(
+                    text = "PROTOCOL ERROR: ${loginError ?: ""}",
+                    color = Color.Red,
+                    fontSize = 12.sp,
+                    fontFamily = FontFamily.Monospace,
+                    modifier = Modifier.padding(bottom = 12.dp),
+                    textAlign = TextAlign.Center
+                )
+            }
 
             // Google Scopes Request Card
             CyberCard(modifier = Modifier.fillMaxWidth(), cornerRadius = 16.dp) {
@@ -251,11 +267,14 @@ fun LoginScreen(viewModel: JarvisViewModel) {
                                 if (credential is GoogleIdTokenCredential) {
                                     viewModel.login(credential.id)
                                 } else {
-                                    // Fallback if successful but not expected type
+                                    Log.w("Auth", "Unknown credential type received: ${credential.type}")
+                                    viewModel.setLoginError("UNRECOGNIZED IDENTITY PACKET")
+                                    // Fallback to simulation if desired, but notifying user
                                     viewModel.login("mr4425390@gmail.com")
                                 }
                             } catch (e: Exception) {
                                 Log.e("Auth", "Google sign in failed or cancelled", e)
+                                viewModel.setLoginError(e.message ?: "AUTH_CHANNEL_FAILURE")
                                 // Standard fallback to allow entry if needed, but following core Google flow
                                 viewModel.login("mr4425390@gmail.com")
                             }
@@ -291,6 +310,18 @@ fun LoginScreen(viewModel: JarvisViewModel) {
                     }
                 }
             }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // Developer Metadata Footer
+            Text(
+                text = projectConfig,
+                fontSize = 10.sp,
+                color = TextSlate500,
+                fontFamily = FontFamily.Monospace,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.alpha(0.6f)
+            )
         }
     }
 }
@@ -722,6 +753,18 @@ fun ConnectivityCard(modifier: Modifier = Modifier) {
 
 @Composable
 fun TelemetryHeader() {
+    val projectId = stringResource(R.string.google_project_id)
+    val infiniteTransition = rememberInfiniteTransition(label = "pulse")
+    val alpha by infiniteTransition.animateFloat(
+        initialValue = 0.4f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1000, easing = EaseInOutSine),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "alpha"
+    )
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -730,14 +773,23 @@ fun TelemetryHeader() {
         verticalAlignment = Alignment.Bottom
     ) {
         Column {
-            Text(
-                text = "NEURAL LINK ACTIVE",
-                fontFamily = FontFamily.Monospace,
-                fontSize = 10.sp,
-                letterSpacing = 2.sp,
-                color = CyanNeo,
-                modifier = Modifier.padding(bottom = 4.dp)
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(6.dp)
+                        .clip(CircleShape)
+                        .background(CyanNeo.copy(alpha = alpha))
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = "NEURAL LINK ACTIVE | $projectId",
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 10.sp,
+                    letterSpacing = 1.sp,
+                    color = CyanNeo,
+                )
+            }
+            Spacer(modifier = Modifier.height(4.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = "Hello, ",

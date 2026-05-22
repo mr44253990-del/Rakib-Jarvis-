@@ -72,6 +72,9 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
     private val _isAuthenticating = MutableStateFlow(false)
     val isAuthenticating: StateFlow<Boolean> = _isAuthenticating.asStateFlow()
 
+    private val _loginError = MutableStateFlow<String?>(null)
+    val loginError: StateFlow<String?> = _loginError.asStateFlow()
+
     private val _scopeGmailGranted = MutableStateFlow(true)
     val scopeGmailGranted: StateFlow<Boolean> = _scopeGmailGranted.asStateFlow()
 
@@ -108,21 +111,32 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
     fun login(email: String) {
         viewModelScope.launch {
             _isAuthenticating.value = true
+            _loginError.value = null
             kotlinx.coroutines.delay(1800) // Cyber auth logic
             
             // Save login state permanently
-            prefs.edit().putBoolean("is_logged_in", true).apply()
+            prefs.edit().apply {
+                putBoolean("is_logged_in", true)
+                putString("user_email", email)
+            }.apply()
             
             _isLoggedIn.value = true
             _isAuthenticating.value = false
 
+            // Update memory with actual email
+            repository.insertMemory(Memory(fact = "User Active Email: $email"))
+
             // Welcome from Jarvis
-            val greetingText = "অ্যাক্সেস অনুমোদিত। স্বাগতম মাস্টার রাকিবুল। আমার সমস্ত সিস্টেম এবং ইন্টারফেস এখন সম্পূর্ণ কার্যকর। আপনার কোর ডেটাবেস লোড করা হয়েছে। আমি আপনাকে কীভাবে সাহায্য করতে পারি?"
+            val greetingText = "অ্যাক্সেস অনুমোদিত। স্বাগতম মাস্টার রাকিবুল। আপনার ইমেইল $email সফলভাবে লিঙ্ক করা হয়েছে। আমি আপনাকে কীভাবে সাহায্য করতে পারি?"
             repository.insertMessage(ChatMessage(sender = "jarvis", text = greetingText))
             if (_ttsEnabled.value) {
                 _ttsSpeakTrigger.tryEmit(greetingText)
             }
         }
+    }
+
+    fun setLoginError(error: String) {
+        _loginError.value = error
     }
 
     fun logout() {
